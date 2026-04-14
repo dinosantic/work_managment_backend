@@ -1,9 +1,5 @@
 import jwt from "jsonwebtoken";
-
-export type AuthTokenPayload = {
-  id: number;
-  role: string;
-};
+import { AuthTokenPayload } from "../types/auth";
 
 function getJwtSecret() {
   const jwtSecret = process.env.JWT_SECRET;
