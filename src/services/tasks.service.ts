@@ -49,6 +49,35 @@ export async function listTasksService(userId: number, role: string) {
   }
 }
 
+export async function getTaskService(
+  taskId: number,
+  userId: number,
+  role: string,
+) {
+  try {
+    const task = await dbGet<TaskRow>(
+      "SELECT id, title, status, user_id FROM tasks WHERE id = ?",
+      [taskId],
+    );
+
+    if (!task) {
+      throw new AppError("Task not found", 404);
+    }
+
+    if (role !== "ADMIN" && task.user_id !== userId) {
+      throw new AppError("Not allowed", 403);
+    }
+
+    return task;
+  } catch (err) {
+    if (err instanceof AppError) {
+      throw err;
+    }
+
+    throw new AppError("Failed to load task", 500);
+  }
+}
+
 async function getTaskOwnership(taskId: number) {
   try {
     const task = await dbGet<TaskOwnershipRow>(

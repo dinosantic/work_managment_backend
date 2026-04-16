@@ -3,6 +3,7 @@ import { AuthRequest } from "../middleware/auth.middleware";
 import {
   createTaskService,
   deleteTaskService,
+  getTaskService,
   listTasksService,
   updateTaskService,
 } from "../services/tasks.service";
@@ -30,6 +31,14 @@ export async function listTasks(req: AuthRequest, res: Response) {
 
   const tasks = await listTasksService(id, role);
   res.status(200).json(tasks);
+}
+
+export async function getTask(req: AuthRequest<TaskIdParams>, res: Response) {
+  const taskId = Number(req.params.id);
+  const { id: userId, role } = req.user!;
+
+  const task = await getTaskService(taskId, userId, role);
+  res.status(200).json(task);
 }
 //update task status
 export async function updateTask(

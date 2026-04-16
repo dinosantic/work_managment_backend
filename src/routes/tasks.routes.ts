@@ -3,6 +3,7 @@ import { authMiddleware } from "../middleware/auth.middleware";
 import {
   createTask,
   deleteTask,
+  getTask,
   listTasks,
   updateTask,
 } from "../controllers/tasks.controller";
@@ -17,6 +18,7 @@ const router = Router();
 
 router.post("/", authMiddleware, validate(createTaskSchema), createTask);
 router.get("/", authMiddleware, listTasks);
+router.get("/:id", authMiddleware, validate(taskIdParamSchema, "params"), getTask);
 router.patch(
   "/:id",
   authMiddleware,
