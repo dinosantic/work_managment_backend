@@ -9,23 +9,29 @@ type TaskOwnershipRow = {
 type TaskRow = {
   id: number;
   title: string;
+  description: string;
   status: string;
   user_id: number;
 };
 
-export async function createTaskService(title: string, userId: number) {
+export async function createTaskService(
+  title: string,
+  description: string,
+  userId: number,
+) {
   try {
     const result = await dbRun(
       `
-        INSERT INTO tasks (title, user_id)
-        VALUES (?, ?)
+        INSERT INTO tasks (title, description, user_id)
+        VALUES (?, ?, ?)
       `,
-      [title, userId],
+      [title, description, userId],
     );
 
     return {
       id: result.lastID,
       title,
+      description,
       status: "OPEN",
     };
   } catch {
@@ -35,7 +41,7 @@ export async function createTaskService(title: string, userId: number) {
 
 export async function listTasksService(userId: number, role: string) {
   try {
-    let query = "SELECT id, title, status, user_id FROM tasks";
+    let query = "SELECT id, title, description, status, user_id FROM tasks";
     const params: number[] = [];
 
     if (role !== "ADMIN") {
@@ -56,7 +62,7 @@ export async function getTaskService(
 ) {
   try {
     const task = await dbGet<TaskRow>(
-      "SELECT id, title, status, user_id FROM tasks WHERE id = ?",
+      "SELECT id, title, description, status, user_id FROM tasks WHERE id = ?",
       [taskId],
     );
 
@@ -101,6 +107,8 @@ async function getTaskOwnership(taskId: number) {
 
 export async function updateTaskService(
   taskId: number,
+  title: string,
+  description: string,
   status: string,
   userId: number,
   role: string,
@@ -115,11 +123,13 @@ export async function updateTaskService(
     await dbRun(
       `
         UPDATE tasks
-        SET status = ?
+        SET title = ?, description = ?, status = ?
         WHERE id = ?
       `,
-      [status, taskId],
+      [title, description, status, taskId],
     );
+
+    return await getTaskService(taskId, userId, role);
   } catch {
     throw new AppError("Failed to update task", 500);
   }

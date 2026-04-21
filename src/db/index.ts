@@ -47,10 +47,35 @@ db.serialize(() => {
   CREATE TABLE IF NOT EXISTS tasks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'OPEN',
     user_id INTEGER NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
   )
 `);
+  db.all(
+    "PRAGMA table_info(tasks)",
+    (err, columns: Array<{ name: string }> = []) => {
+      if (err) {
+        console.error("Failed to inspect tasks schema", err);
+        return;
+      }
+
+      const hasDescription = columns.some(
+        (column) => column.name === "description",
+      );
+
+      if (!hasDescription) {
+        db.run(
+          "ALTER TABLE tasks ADD COLUMN description TEXT NOT NULL DEFAULT ''",
+          (alterErr) => {
+            if (alterErr) {
+              console.error("Failed to add description column", alterErr);
+            }
+          },
+        );
+      }
+    },
+  );
 });

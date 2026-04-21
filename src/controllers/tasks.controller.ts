@@ -17,11 +17,11 @@ export async function createTask(
   req: AuthRequest<Record<string, string>, CreateTaskBody>,
   res: Response,
 ) {
-  const { title } = req.body;
+  const { title, description } = req.body;
 
   const userId = req.user!.id;
 
-  const task = await createTaskService(title, userId);
+  const task = await createTaskService(title, description, userId);
   res.status(201).json(task);
 }
 
@@ -46,12 +46,19 @@ export async function updateTask(
   res: Response,
 ) {
   const taskId = Number(req.params.id);
-  const { status } = req.body;
+  const { title, description, status } = req.body;
 
   const { id: userId, role } = req.user!;
 
-  await updateTaskService(taskId, status, userId, role);
-  res.json({ message: "Task updated" });
+  const task = await updateTaskService(
+    taskId,
+    title,
+    description,
+    status,
+    userId,
+    role,
+  );
+  res.json(task);
 }
 //delete task
 export async function deleteTask(
