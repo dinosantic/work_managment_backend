@@ -1,6 +1,7 @@
-import { dbGet } from "../db/sqlite";
+import { dbGet, dbRun } from "../db/sqlite";
 import { AppError } from "../errors/AppError";
 import { CurrentUser, CurrentUserRow } from "../types/users";
+import type { Role } from "../types/roles";
 
 function deriveDisplayName(email: string, displayName: string | null) {
   if (displayName?.trim()) {
@@ -43,7 +44,7 @@ export async function editCurrentUserService(
   displayName?: string,
 ) {
   try {
-    await dbGet(
+    await dbRun(
       `
         UPDATE users
         SET display_name = ?
@@ -61,16 +62,16 @@ export async function editCurrentUserService(
 export async function editUserService(
   userId: number,
   adminId: number,
-  updates: { role?: string },
+  updates: { role?: Role },
 ) {
-  // Verify admin has permission to edit users
   const admin = await getCurrentUserService(adminId);
-  if (admin.role !== "admin") {
+
+  if (admin.role !== "ADMIN") {
     throw new AppError("Unauthorized", 403);
   }
 
-  const setClauses = [];
-  const params = [];
+  const setClauses: string[] = [];
+  const params: Array<Role | number> = [];
 
   if (updates.role !== undefined) {
     setClauses.push("role = ?");
@@ -84,7 +85,7 @@ export async function editUserService(
   params.push(userId);
 
   try {
-    await dbGet(
+    await dbRun(
       `UPDATE users SET ${setClauses.join(", ")} WHERE id = ?`,
       params,
     );

@@ -2,12 +2,13 @@ import bcrypt from "bcrypt";
 import { dbGet, dbRun } from "../db/sqlite";
 import { AppError } from "../errors/AppError";
 import { signToken } from "../utils/jwt";
+import type { Role } from "../types/roles";
 
 type UserRow = {
   id: number;
   email: string;
   password: string;
-  role: string;
+  role: Role;
 };
 
 export async function registerUser(email: string, password: string) {

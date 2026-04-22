@@ -17,11 +17,19 @@ export async function createTask(
   req: AuthRequest<Record<string, string>, CreateTaskBody>,
   res: Response,
 ) {
-  const { title, description } = req.body;
+  const { title, description, priority, dueDate, assigneeUserId } = req.body;
 
-  const userId = req.user!.id;
+  const { id: userId, role } = req.user!;
 
-  const task = await createTaskService(title, description, userId);
+  const task = await createTaskService(
+    title,
+    description,
+    priority,
+    dueDate,
+    assigneeUserId,
+    userId,
+    role,
+  );
   res.status(201).json(task);
 }
 
@@ -46,7 +54,8 @@ export async function updateTask(
   res: Response,
 ) {
   const taskId = Number(req.params.id);
-  const { title, description, status } = req.body;
+  const { title, description, status, priority, dueDate, assigneeUserId } =
+    req.body;
 
   const { id: userId, role } = req.user!;
 
@@ -55,6 +64,9 @@ export async function updateTask(
     title,
     description,
     status,
+    priority,
+    dueDate,
+    assigneeUserId,
     userId,
     role,
   );
