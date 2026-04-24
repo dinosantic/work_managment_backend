@@ -96,7 +96,10 @@ function migrateLegacyTasksTable(columns: TableColumn[]) {
           `,
           (copyErr) => {
             if (copyErr) {
-              console.error("Failed to copy legacy tasks into migrated table", copyErr);
+              console.error(
+                "Failed to copy legacy tasks into migrated table",
+                copyErr,
+              );
               return;
             }
 
@@ -106,7 +109,9 @@ function migrateLegacyTasksTable(columns: TableColumn[]) {
                 return;
               }
 
-              console.log("Migrated legacy tasks table to creator/assignee schema");
+              console.log(
+                "Migrated legacy tasks table to creator/assignee schema",
+              );
             });
           },
         );
@@ -116,6 +121,12 @@ function migrateLegacyTasksTable(columns: TableColumn[]) {
 }
 
 db.serialize(() => {
+  db.run("PRAGMA foreign_keys = ON", (err) => {
+    if (err) {
+      console.error("Failed to enable SQLite foreign keys", err);
+    }
+  });
+
   db.run(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -162,105 +173,122 @@ db.serialize(() => {
     FOREIGN KEY (assignee_user_id) REFERENCES users(id)
   )
 `);
-  db.all(
-    "PRAGMA table_info(tasks)",
-    (err, columns: TableColumn[] = []) => {
-      if (err) {
-        console.error("Failed to inspect tasks schema", err);
-        return;
-      }
+  db.all("PRAGMA table_info(tasks)", (err, columns: TableColumn[] = []) => {
+    if (err) {
+      console.error("Failed to inspect tasks schema", err);
+      return;
+    }
 
-      const columnNames = getColumnNames(columns);
+    const columnNames = getColumnNames(columns);
 
-      if (columnNames.has("user_id")) {
-        migrateLegacyTasksTable(columns);
-        return;
-      }
+    if (columnNames.has("user_id")) {
+      migrateLegacyTasksTable(columns);
+      return;
+    }
 
-      const hasDescription = columnNames.has("description");
+    const hasDescription = columnNames.has("description");
 
-      if (!hasDescription) {
-        db.run(
-          "ALTER TABLE tasks ADD COLUMN description TEXT NOT NULL DEFAULT ''",
-          (alterErr) => {
-            if (alterErr) {
-              console.error("Failed to add description column", alterErr);
-            }
-          },
-        );
-      }
-
-      const hasPriority = columnNames.has("priority");
-
-      if (!hasPriority) {
-        db.run(
-          "ALTER TABLE tasks ADD COLUMN priority TEXT NOT NULL DEFAULT 'MEDIUM'",
-          (alterErr) => {
-            if (alterErr) {
-              console.error("Failed to add priority column", alterErr);
-            }
-          },
-        );
-      }
-
-      const hasDueDate = columnNames.has("due_date");
-
-      if (!hasDueDate) {
-        db.run("ALTER TABLE tasks ADD COLUMN due_date TEXT", (alterErr) => {
+    if (!hasDescription) {
+      db.run(
+        "ALTER TABLE tasks ADD COLUMN description TEXT NOT NULL DEFAULT ''",
+        (alterErr) => {
           if (alterErr) {
-            console.error("Failed to add due_date column", alterErr);
+            console.error("Failed to add description column", alterErr);
           }
-        });
-      }
+        },
+      );
+    }
 
-      const hasCreatedBy = columnNames.has("created_by");
+    const hasPriority = columnNames.has("priority");
 
-      if (!hasCreatedBy) {
-        db.run("ALTER TABLE tasks ADD COLUMN created_by INTEGER", (alterErr) => {
+    if (!hasPriority) {
+      db.run(
+        "ALTER TABLE tasks ADD COLUMN priority TEXT NOT NULL DEFAULT 'MEDIUM'",
+        (alterErr) => {
           if (alterErr) {
-            console.error("Failed to add created_by column", alterErr);
+            console.error("Failed to add priority column", alterErr);
+          }
+        },
+      );
+    }
+
+    const hasDueDate = columnNames.has("due_date");
+
+    if (!hasDueDate) {
+      db.run("ALTER TABLE tasks ADD COLUMN due_date TEXT", (alterErr) => {
+        if (alterErr) {
+          console.error("Failed to add due_date column", alterErr);
+        }
+      });
+    }
+
+    const hasCreatedBy = columnNames.has("created_by");
+
+    if (!hasCreatedBy) {
+      db.run("ALTER TABLE tasks ADD COLUMN created_by INTEGER", (alterErr) => {
+        if (alterErr) {
+          console.error("Failed to add created_by column", alterErr);
+          return;
+        }
+
+        db.run(
+          "UPDATE tasks SET created_by = user_id WHERE created_by IS NULL",
+          (updateErr) => {
+            if (updateErr) {
+              console.error("Failed to backfill created_by column", updateErr);
+            }
+          },
+        );
+      });
+    }
+
+    const hasAssigneeUserId = columnNames.has("assignee_user_id");
+
+    if (!hasAssigneeUserId) {
+      db.run(
+        "ALTER TABLE tasks ADD COLUMN assignee_user_id INTEGER",
+        (alterErr) => {
+          if (alterErr) {
+            console.error("Failed to add assignee_user_id column", alterErr);
             return;
           }
 
           db.run(
-            "UPDATE tasks SET created_by = user_id WHERE created_by IS NULL",
+            "UPDATE tasks SET assignee_user_id = COALESCE(created_by, user_id) WHERE assignee_user_id IS NULL",
             (updateErr) => {
               if (updateErr) {
-                console.error("Failed to backfill created_by column", updateErr);
+                console.error(
+                  "Failed to backfill assignee_user_id column",
+                  updateErr,
+                );
               }
             },
           );
-        });
-      }
+        },
+      );
+    }
+  });
+  db.run(`
+    CREATE TABLE IF NOT EXISTS projects (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      description TEXT,
+      created_by INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (created_by) REFERENCES users(id)
+    )
+  `);
 
-      const hasAssigneeUserId = columnNames.has("assignee_user_id");
-
-      if (!hasAssigneeUserId) {
-        db.run(
-          "ALTER TABLE tasks ADD COLUMN assignee_user_id INTEGER",
-          (alterErr) => {
-            if (alterErr) {
-              console.error(
-                "Failed to add assignee_user_id column",
-                alterErr,
-              );
-              return;
-            }
-
-            db.run(
-              "UPDATE tasks SET assignee_user_id = COALESCE(created_by, user_id) WHERE assignee_user_id IS NULL",
-              (updateErr) => {
-                if (updateErr) {
-                  console.error(
-                    "Failed to backfill assignee_user_id column",
-                    updateErr,
-                  );
-                }
-              },
-            );
-          },
-        );
-      }
-    },
-  );
+  db.run(`
+    CREATE TABLE IF NOT EXISTS project_members (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      role TEXT NOT NULL DEFAULT 'MEMBER',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(project_id, user_id),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
 });

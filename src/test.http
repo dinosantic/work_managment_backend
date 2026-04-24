@@ -1,14 +1,17 @@
-# POST http://localhost:3000/auth/register HTTP/1.1
-# content-type: application/json
-# {
-#     "email": "sample@example.com",
-#     "password": "password123"
-# }
 
-POST http://localhost:3000/auth/login HTTP/1.1
+POST http://localhost:3000/projects HTTP/1.1
 content-type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6IlVTRVIiLCJpYXQiOjE3NzcwMzI4NDcsImV4cCI6MTc3NzAzNjQ0N30.8-98B-SWmckfGtB4b6FrPNmbKWGuXjWguRS1tzJyKAk
 
 {
-    "email": "sample@example.com",
-    "password": "password123"
+    "name": "Project Alpha",
+    "description": "This is a sample project."
 }
+
+# GET http://localhost:3000/projects HTTP/1.1
+# Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6IlVTRVIiLCJpYXQiOjE3NzcwMzI4NDcsImV4cCI6MTc3NzAzNjQ0N30.8-98B-SWmckfGtB4b6FrPNmbKWGuXjWguRS1tzJyKAk
+
+# GET http://localhost:3000/projects/1 HTTP/1.1
+# Authorization: Bearer <token>
+#DELETE http://localhost:3000/projects/2 HTTP/1.1
+#Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6IlVTRVIiLCJpYXQiOjE3NzcwMzI4NDcsImV4cCI6MTc3NzAzNjQ0N30.8-98B-SWmckfGtB4b6FrPNmbKWGuXjWguRS1tzJyKAk

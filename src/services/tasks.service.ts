@@ -19,6 +19,7 @@ function mapTaskRow(task: TaskRow): Task {
     dueDate: task.due_date,
     createdById: task.created_by,
     assigneeUserId: task.assignee_user_id,
+    projectId: task.projectId,
   };
 }
 
@@ -72,7 +73,14 @@ export async function createTaskService(
         INSERT INTO tasks (title, description, priority, due_date, created_by, assignee_user_id)
         VALUES (?, ?, ?, ?, ?, ?)
       `,
-      [title, description, priority, dueDate ?? null, userId, resolvedAssigneeUserId],
+      [
+        title,
+        description,
+        priority,
+        dueDate ?? null,
+        userId,
+        resolvedAssigneeUserId,
+      ],
     );
 
     return {
@@ -101,7 +109,8 @@ export async function listTasksService(userId: number, role: Role) {
       params.push(userId, userId);
     }
 
-    query += " ORDER BY CASE status WHEN 'IN_PROGRESS' THEN 1 WHEN 'OPEN' THEN 2 ELSE 3 END, due_date IS NULL, due_date ASC, id DESC";
+    query +=
+      " ORDER BY CASE status WHEN 'IN_PROGRESS' THEN 1 WHEN 'OPEN' THEN 2 ELSE 3 END, due_date IS NULL, due_date ASC, id DESC";
 
     const tasks = await dbAll<TaskRow>(query, params);
 
@@ -193,7 +202,15 @@ export async function updateTaskService(
         SET title = ?, description = ?, status = ?, priority = ?, due_date = ?, assignee_user_id = ?
         WHERE id = ?
       `,
-      [title, description, status, priority, dueDate, resolvedAssigneeUserId, taskId],
+      [
+        title,
+        description,
+        status,
+        priority,
+        dueDate,
+        resolvedAssigneeUserId,
+        taskId,
+      ],
     );
 
     return await getTaskService(taskId, userId, role);

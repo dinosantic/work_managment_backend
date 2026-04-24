@@ -2,6 +2,7 @@ import express from "express";
 import authRoutes from "./routes/auth.routes";
 import usersRoutes from "./routes/users.routes";
 import tasksRoutes from "./routes/tasks.routes";
+import projectsRoutes from "./routes/projects.routes";
 import { errorMiddleware } from "./middleware/error.middleware";
 import cors from "cors";
 import "./db";
@@ -20,6 +21,7 @@ app.use(
 app.use("/auth", authRoutes);
 app.use("/users", usersRoutes);
 app.use("/tasks", tasksRoutes);
+app.use("/projects", projectsRoutes);
 
 app.use(errorMiddleware);
 
