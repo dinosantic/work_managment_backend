@@ -2,6 +2,7 @@ import { z } from "zod";
 import { TASK_PRIORITIES, TASK_STATUSES } from "../types/tasks";
 
 export const createTaskSchema = z.object({
+  projectId: z.number().int().positive("Project id must be a positive integer"),
   title: z.string().trim().min(1, "Title is required"),
   description: z.string().trim().min(1, "Description is required"),
   priority: z.enum(TASK_PRIORITIES).default("MEDIUM"),

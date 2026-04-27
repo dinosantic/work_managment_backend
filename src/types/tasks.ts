@@ -13,7 +13,7 @@ export type TaskRow = {
   due_date: string | null;
   created_by: number;
   assignee_user_id: number | null;
-  projectId: number;
+  project_id: number;
 };
 
 export type Task = {

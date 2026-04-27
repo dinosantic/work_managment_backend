@@ -58,9 +58,11 @@ function migrateLegacyTasksTable(columns: TableColumn[]) {
           due_date TEXT,
           created_by INTEGER NOT NULL,
           assignee_user_id INTEGER,
+          project_id INTEGER,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (created_by) REFERENCES users(id),
-          FOREIGN KEY (assignee_user_id) REFERENCES users(id)
+          FOREIGN KEY (assignee_user_id) REFERENCES users(id),
+          FOREIGN KEY (project_id) REFERENCES projects(id)
         )
       `,
       (createErr) => {
@@ -80,6 +82,7 @@ function migrateLegacyTasksTable(columns: TableColumn[]) {
               due_date,
               created_by,
               assignee_user_id,
+              project_id,
               created_at
             )
             SELECT
@@ -91,6 +94,7 @@ function migrateLegacyTasksTable(columns: TableColumn[]) {
               ${dueDateExpression},
               ${createdByExpression},
               ${assigneeExpression},
+              NULL,
               created_at
             FROM tasks_legacy
           `,
@@ -112,12 +116,175 @@ function migrateLegacyTasksTable(columns: TableColumn[]) {
               console.log(
                 "Migrated legacy tasks table to creator/assignee schema",
               );
+
+              backfillTaskProjects();
             });
           },
         );
       },
     );
   });
+}
+
+function backfillTaskProjects() {
+  db.all(
+    `
+      SELECT id, created_by, assignee_user_id
+      FROM tasks
+      WHERE project_id IS NULL
+      ORDER BY created_by ASC, id ASC
+    `,
+    (
+      err,
+      rows: Array<{
+        id: number;
+        created_by: number;
+        assignee_user_id: number | null;
+      }> = [],
+    ) => {
+      if (err) {
+        console.error("Failed to load tasks for project backfill", err);
+        return;
+      }
+
+      if (rows.length === 0) {
+        return;
+      }
+
+      const tasksByCreator = new Map<
+        number,
+        Array<{ id: number; assignee_user_id: number | null }>
+      >();
+
+      for (const row of rows) {
+        const creatorTasks = tasksByCreator.get(row.created_by) ?? [];
+        creatorTasks.push({
+          id: row.id,
+          assignee_user_id: row.assignee_user_id,
+        });
+        tasksByCreator.set(row.created_by, creatorTasks);
+      }
+
+      const creators = Array.from(tasksByCreator.entries());
+
+      const processCreator = (index: number) => {
+        if (index >= creators.length) {
+          console.log("Backfilled task project assignments");
+          return;
+        }
+
+        const [creatorId, creatorTasks] = creators[index];
+        const projectName = `Migrated Tasks - User ${creatorId}`;
+
+        db.get(
+          "SELECT id FROM projects WHERE created_by = ? AND name = ?",
+          [creatorId, projectName],
+          (projectLookupErr, existingProject: { id: number } | undefined) => {
+            if (projectLookupErr) {
+              console.error(
+                "Failed to look up migrated project for creator",
+                projectLookupErr,
+              );
+              return;
+            }
+
+            const useProject = (projectId: number) => {
+              db.run(
+                "INSERT OR IGNORE INTO project_members (project_id, user_id, role) VALUES (?, ?, 'MANAGER')",
+                [projectId, creatorId],
+                (creatorMembershipErr) => {
+                  if (creatorMembershipErr) {
+                    console.error(
+                      "Failed to attach creator to migrated project",
+                      creatorMembershipErr,
+                    );
+                    return;
+                  }
+
+                  const assigneeIds = Array.from(
+                    new Set(
+                      creatorTasks
+                        .map((task) => task.assignee_user_id)
+                        .filter(
+                          (assigneeId): assigneeId is number =>
+                            assigneeId !== null && assigneeId !== creatorId,
+                        ),
+                    ),
+                  );
+
+                  const attachAssignee = (assigneeIndex: number) => {
+                    if (assigneeIndex >= assigneeIds.length) {
+                      db.run(
+                        "UPDATE tasks SET project_id = ? WHERE created_by = ? AND project_id IS NULL",
+                        [projectId, creatorId],
+                        (updateErr) => {
+                          if (updateErr) {
+                            console.error(
+                              "Failed to update tasks with migrated project id",
+                              updateErr,
+                            );
+                            return;
+                          }
+
+                          processCreator(index + 1);
+                        },
+                      );
+                      return;
+                    }
+
+                    db.run(
+                      "INSERT OR IGNORE INTO project_members (project_id, user_id, role) VALUES (?, ?, 'MEMBER')",
+                      [projectId, assigneeIds[assigneeIndex]],
+                      (assigneeMembershipErr) => {
+                        if (assigneeMembershipErr) {
+                          console.error(
+                            "Failed to attach assignee to migrated project",
+                            assigneeMembershipErr,
+                          );
+                          return;
+                        }
+
+                        attachAssignee(assigneeIndex + 1);
+                      },
+                    );
+                  };
+
+                  attachAssignee(0);
+                },
+              );
+            };
+
+            if (existingProject) {
+              useProject(existingProject.id);
+              return;
+            }
+
+            db.run(
+              "INSERT INTO projects (name, description, created_by) VALUES (?, ?, ?)",
+              [
+                projectName,
+                "Auto-created during task-to-project migration",
+                creatorId,
+              ],
+              function (createProjectErr) {
+                if (createProjectErr) {
+                  console.error(
+                    "Failed to create migrated project for creator",
+                    createProjectErr,
+                  );
+                  return;
+                }
+
+                useProject(this.lastID);
+              },
+            );
+          },
+        );
+      };
+
+      processCreator(0);
+    },
+  );
 }
 
 db.serialize(() => {
@@ -168,6 +335,29 @@ db.serialize(() => {
     },
   );
   db.run(`
+    CREATE TABLE IF NOT EXISTS projects (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      description TEXT,
+      created_by INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (created_by) REFERENCES users(id)
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS project_members (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      role TEXT NOT NULL DEFAULT 'MEMBER',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(project_id, user_id),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+  db.run(`
   CREATE TABLE IF NOT EXISTS tasks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,
@@ -177,9 +367,11 @@ db.serialize(() => {
     due_date TEXT,
     created_by INTEGER NOT NULL,
     assignee_user_id INTEGER,
+    project_id INTEGER,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (created_by) REFERENCES users(id),
-    FOREIGN KEY (assignee_user_id) REFERENCES users(id)
+    FOREIGN KEY (assignee_user_id) REFERENCES users(id),
+    FOREIGN KEY (project_id) REFERENCES projects(id)
   )
 `);
   db.all("PRAGMA table_info(tasks)", (err, columns: TableColumn[] = []) => {
@@ -276,28 +468,22 @@ db.serialize(() => {
         },
       );
     }
-  });
-  db.run(`
-    CREATE TABLE IF NOT EXISTS projects (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      description TEXT,
-      created_by INTEGER NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (created_by) REFERENCES users(id)
-    )
-  `);
 
-  db.run(`
-    CREATE TABLE IF NOT EXISTS project_members (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      project_id INTEGER NOT NULL,
-      user_id INTEGER NOT NULL,
-      role TEXT NOT NULL DEFAULT 'MEMBER',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(project_id, user_id),
-      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    )
-  `);
+    const hasProjectId = columnNames.has("project_id");
+
+    if (!hasProjectId) {
+      db.run("ALTER TABLE tasks ADD COLUMN project_id INTEGER", (alterErr) => {
+        if (alterErr) {
+          console.error("Failed to add project_id column", alterErr);
+          return;
+        }
+
+        backfillTaskProjects();
+      });
+
+      return;
+    }
+
+    backfillTaskProjects();
+  });
 });

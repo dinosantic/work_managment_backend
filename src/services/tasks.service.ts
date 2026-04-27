@@ -3,10 +3,21 @@ import { dbAll, dbGet, dbRun } from "../db/sqlite";
 import type { Role } from "../types/roles";
 import type { Task, TaskPriority, TaskRow, TaskStatus } from "../types/tasks";
 
-type TaskAccessRow = Pick<TaskRow, "id" | "created_by" | "assignee_user_id">;
+type TaskAccessRow = Pick<
+  TaskRow,
+  "id" | "created_by" | "assignee_user_id" | "project_id"
+>;
 
 type UserLookupRow = {
   id: number;
+};
+
+type ProjectLookupRow = {
+  id: number;
+};
+
+type ProjectMembershipLookupRow = {
+  role: string;
 };
 
 function mapTaskRow(task: TaskRow): Task {
@@ -19,7 +30,7 @@ function mapTaskRow(task: TaskRow): Task {
     dueDate: task.due_date,
     createdById: task.created_by,
     assigneeUserId: task.assignee_user_id,
-    projectId: task.projectId,
+    projectId: task.project_id,
   };
 }
 
@@ -42,6 +53,44 @@ async function ensureAssigneeExists(assigneeUserId: number) {
   }
 }
 
+async function ensureProjectExists(projectId: number) {
+  try {
+    const project = await dbGet<ProjectLookupRow>(
+      "SELECT id FROM projects WHERE id = ?",
+      [projectId],
+    );
+
+    if (!project) {
+      throw new AppError("Project not found", 404);
+    }
+  } catch (err) {
+    if (err instanceof AppError) {
+      throw err;
+    }
+
+    throw new AppError("Failed to validate project", 500);
+  }
+}
+
+async function ensureProjectMember(projectId: number, userId: number) {
+  try {
+    const membership = await dbGet<ProjectMembershipLookupRow>(
+      "SELECT role FROM project_members WHERE project_id = ? AND user_id = ?",
+      [projectId, userId],
+    );
+
+    if (!membership) {
+      throw new AppError("User must belong to the project", 403);
+    }
+  } catch (err) {
+    if (err instanceof AppError) {
+      throw err;
+    }
+
+    throw new AppError("Failed to validate project membership", 500);
+  }
+}
+
 function canAccessTask(task: TaskAccessRow, userId: number, role: Role) {
   return (
     role === "ADMIN" ||
@@ -51,6 +100,7 @@ function canAccessTask(task: TaskAccessRow, userId: number, role: Role) {
 }
 
 export async function createTaskService(
+  projectId: number,
   title: string,
   description: string,
   priority: TaskPriority,
@@ -65,15 +115,19 @@ export async function createTaskService(
     throw new AppError("Not allowed to assign task", 403);
   }
 
+  await ensureProjectExists(projectId);
+  await ensureProjectMember(projectId, userId);
   await ensureAssigneeExists(resolvedAssigneeUserId);
+  await ensureProjectMember(projectId, resolvedAssigneeUserId);
 
   try {
     const result = await dbRun(
       `
-        INSERT INTO tasks (title, description, priority, due_date, created_by, assignee_user_id)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO tasks (project_id, title, description, priority, due_date, created_by, assignee_user_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
       `,
       [
+        projectId,
         title,
         description,
         priority,
@@ -92,6 +146,7 @@ export async function createTaskService(
       dueDate: dueDate ?? null,
       createdById: userId,
       assigneeUserId: resolvedAssigneeUserId,
+      projectId,
     };
   } catch {
     throw new AppError("Failed to create task", 500);
@@ -101,7 +156,7 @@ export async function createTaskService(
 export async function listTasksService(userId: number, role: Role) {
   try {
     let query =
-      "SELECT id, title, description, status, priority, due_date, created_by, assignee_user_id FROM tasks";
+      "SELECT id, title, description, status, priority, due_date, created_by, assignee_user_id, project_id FROM tasks";
     const params: number[] = [];
 
     if (role !== "ADMIN") {
@@ -127,7 +182,7 @@ export async function getTaskService(
 ) {
   try {
     const task = await dbGet<TaskRow>(
-      "SELECT id, title, description, status, priority, due_date, created_by, assignee_user_id FROM tasks WHERE id = ?",
+      "SELECT id, title, description, status, priority, due_date, created_by, assignee_user_id, project_id FROM tasks WHERE id = ?",
       [taskId],
     );
 
@@ -152,7 +207,7 @@ export async function getTaskService(
 async function getTaskAccess(taskId: number) {
   try {
     const task = await dbGet<TaskAccessRow>(
-      "SELECT id, created_by, assignee_user_id FROM tasks WHERE id = ?",
+      "SELECT id, created_by, assignee_user_id, project_id FROM tasks WHERE id = ?",
       [taskId],
     );
 
@@ -194,6 +249,7 @@ export async function updateTaskService(
   }
 
   await ensureAssigneeExists(resolvedAssigneeUserId);
+  await ensureProjectMember(task.project_id, resolvedAssigneeUserId);
 
   try {
     await dbRun(

@@ -17,11 +17,13 @@ export async function createTask(
   req: AuthRequest<Record<string, string>, CreateTaskBody>,
   res: Response,
 ) {
-  const { title, description, priority, dueDate, assigneeUserId } = req.body;
+  const { projectId, title, description, priority, dueDate, assigneeUserId } =
+    req.body;
 
   const { id: userId, role } = req.user!;
 
   const task = await createTaskService(
+    projectId,
     title,
     description,
     priority,
