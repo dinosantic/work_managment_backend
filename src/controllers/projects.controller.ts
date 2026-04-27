@@ -8,13 +8,15 @@ import {
   listProjectMembersService,
   listProjectsService,
   removeProjectMemberService,
+  updateProjectMemberService,
   updateProjectService,
 } from "../services/projects.service";
 import {
   AddProjectMemberBody,
   CreateProjectBody,
+  ProjectMemberParams,
   ProjectIdParams,
-  RemoveProjectMemberBody,
+  UpdateProjectMemberBody,
 } from "../schemas/project.schema";
 
 export async function createProject(
@@ -107,12 +109,32 @@ export async function addProjectMember(
   res.status(204).send();
 }
 
-export async function removeProjectMember(
-  req: AuthRequest<ProjectIdParams, RemoveProjectMemberBody>,
+export async function updateProjectMember(
+  req: AuthRequest<ProjectMemberParams, UpdateProjectMemberBody>,
   res: Response,
 ) {
   const projectId = Number(req.params.id);
-  const { userId } = req.body;
+  const userId = Number(req.params.userId);
+  const { role } = req.body;
+
+  const { id: requesterUserId, role: requesterRole } = req.user!;
+
+  await updateProjectMemberService(
+    projectId,
+    userId,
+    role,
+    requesterUserId,
+    requesterRole,
+  );
+  res.status(204).send();
+}
+
+export async function removeProjectMember(
+  req: AuthRequest<ProjectMemberParams>,
+  res: Response,
+) {
+  const projectId = Number(req.params.id);
+  const userId = Number(req.params.userId);
 
   const { id: requesterUserId, role: requesterRole } = req.user!;
 

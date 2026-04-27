@@ -8,14 +8,16 @@ import {
   listProjectMembers,
   listProjects,
   removeProjectMember,
+  updateProjectMember,
   updateProject,
 } from "../controllers/projects.controller";
 import { validate } from "../middleware/validate.middleware";
 import {
   addProjectMemberSchema,
   createProjectSchema,
+  projectMemberParamsSchema,
   projectIdParamSchema,
-  removeProjectMemberSchema,
+  updateProjectMemberSchema,
 } from "../schemas/project.schema";
 
 const router = Router();
@@ -57,11 +59,18 @@ router.post(
   addProjectMember,
 );
 
+router.patch(
+  "/:id/members/:userId",
+  authMiddleware,
+  validate(projectMemberParamsSchema, "params"),
+  validate(updateProjectMemberSchema),
+  updateProjectMember,
+);
+
 router.delete(
   "/:id/members/:userId",
   authMiddleware,
-  validate(projectIdParamSchema, "params"),
-  validate(removeProjectMemberSchema),
+  validate(projectMemberParamsSchema, "params"),
   removeProjectMember,
 );
 

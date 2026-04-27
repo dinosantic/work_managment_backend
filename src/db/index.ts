@@ -158,6 +158,15 @@ db.serialize(() => {
       }
     },
   );
+  db.run(
+    "UPDATE users SET role = 'ADMIN' WHERE id = ? AND email = ?",
+    [2, "admin@mail.com"],
+    (err) => {
+      if (err) {
+        console.error("Failed to promote local admin user", err);
+      }
+    },
+  );
   db.run(`
   CREATE TABLE IF NOT EXISTS tasks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

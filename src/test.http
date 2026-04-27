@@ -1,17 +1,137 @@
+# Project membership management
 
-POST http://localhost:3000/projects HTTP/1.1
-content-type: application/json
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6IlVTRVIiLCJpYXQiOjE3NzcwMzI4NDcsImV4cCI6MTc3NzAzNjQ0N30.8-98B-SWmckfGtB4b6FrPNmbKWGuXjWguRS1tzJyKAk
+# Replace these tokens with fresh login tokens before running the requests.
+# Suggested users:
+# - <admin-token>: global ADMIN
+# - <manager-token>: project creator / project MANAGER
+# - <member-token>: normal project MEMBER
+# - <outsider-token>: user who is not part of the project
 
-{
-    "name": "Project Alpha",
-    "description": "This is a sample project."
-}
+### Create project as manager user
+# POST http://localhost:3000/projects HTTP/1.1
+# Content-Type: application/json
+# Authorization: Bearer <manager-token>
+#
+# {
+#   "name": "Website Redesign",
+#   "description": "Internal redesign project"
+# }
 
+### List my projects
 # GET http://localhost:3000/projects HTTP/1.1
-# Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6IlVTRVIiLCJpYXQiOjE3NzcwMzI4NDcsImV4cCI6MTc3NzAzNjQ0N30.8-98B-SWmckfGtB4b6FrPNmbKWGuXjWguRS1tzJyKAk
+# Authorization: Bearer <manager-token>
 
+### Get project detail with members
 # GET http://localhost:3000/projects/1 HTTP/1.1
-# Authorization: Bearer <token>
-#DELETE http://localhost:3000/projects/2 HTTP/1.1
-#Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwicm9sZSI6IlVTRVIiLCJpYXQiOjE3NzcwMzI4NDcsImV4cCI6MTc3NzAzNjQ0N30.8-98B-SWmckfGtB4b6FrPNmbKWGuXjWguRS1tzJyKAk
+# Authorization: Bearer <manager-token>
+
+### List project members
+GET http://localhost:3000/projects/1/members HTTP/1.1
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Miwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzc3MDM3Nzk1LCJleHAiOjE3NzcwNDEzOTV9.MwgDEefgghCS4EyXGpD4oRv9mSs1KZOdasIinm_g0kg
+
+### Add project member as MEMBER
+# POST http://localhost:3000/projects/1/members HTTP/1.1
+# Content-Type: application/json
+# Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Miwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzc3MDM3Nzk1LCJleHAiOjE3NzcwNDEzOTV9.MwgDEefgghCS4EyXGpD4oRv9mSs1KZOdasIinm_g0kg
+
+# {
+#   "userId": 3,
+#   "role": "MEMBER"
+# }
+
+### Add project member as MANAGER
+# POST http://localhost:3000/projects/1/members HTTP/1.1
+# Content-Type: application/json
+# Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Miwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzc3MDM3Nzk1LCJleHAiOjE3NzcwNDEzOTV9.MwgDEefgghCS4EyXGpD4oRv9mSs1KZOdasIinm_g0kg
+
+# {
+#   "userId": 3,
+#   "role": "MANAGER"
+# }
+
+### Duplicate member should fail with 409
+# POST http://localhost:3000/projects/1/members HTTP/1.1
+# Content-Type: application/json
+# Authorization: Bearer <manager-token>
+#
+# {
+#   "userId": 3,
+#   "role": "MEMBER"
+# }
+
+### Nonexistent user should fail with 404
+# POST http://localhost:3000/projects/1/members HTTP/1.1
+# Content-Type: application/json
+# Authorization: Bearer <manager-token>
+#
+# {
+#   "userId": 999,
+#   "role": "MEMBER"
+# }
+
+### Non-manager add should fail with 403
+# POST http://localhost:3000/projects/1/members HTTP/1.1
+# Content-Type: application/json
+# Authorization: Bearer <member-token>
+#
+# {
+#   "userId": 5,
+#   "role": "MEMBER"
+# }
+
+### Promote member to manager
+# PATCH http://localhost:3000/projects/1/members/3 HTTP/1.1
+# Content-Type: application/json
+# Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Miwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzc3MDM3Nzk1LCJleHAiOjE3NzcwNDEzOTV9.MwgDEefgghCS4EyXGpD4oRv9mSs1KZOdasIinm_g0kg
+
+# {
+#   "role": "MANAGER"
+# }
+
+### Demote manager to member
+# PATCH http://localhost:3000/projects/1/members/4 HTTP/1.1
+# Content-Type: application/json
+# Authorization: Bearer <manager-token>
+#
+# {
+#   "role": "MEMBER"
+# }
+
+### Demoting the last manager should fail with 409
+# PATCH http://localhost:3000/projects/1/members/1 HTTP/1.1
+# Content-Type: application/json
+# Authorization: Bearer <manager-token>
+#
+# {
+#   "role": "MEMBER"
+# }
+
+### Remove a project member
+# DELETE http://localhost:3000/projects/1/members/3 HTTP/1.1
+# Authorization: Bearer <manager-token>
+
+### Removing nonexistent member should fail with 404
+# DELETE http://localhost:3000/projects/1/members/999 HTTP/1.1
+# Authorization: Bearer <manager-token>
+
+### Removing the last manager should fail with 409
+# DELETE http://localhost:3000/projects/1/members/1 HTTP/1.1
+# Authorization: Bearer <manager-token>
+
+### Outsider should fail to get project
+# GET http://localhost:3000/projects/1 HTTP/1.1
+# Authorization: Bearer <outsider-token>
+
+### Outsider should fail to list project members
+# GET http://localhost:3000/projects/1/members HTTP/1.1
+# Authorization: Bearer <outsider-token>
+
+### Admin can add project member to any project
+# POST http://localhost:3000/projects/1/members HTTP/1.1
+# Content-Type: application/json
+# Authorization: Bearer <admin-token>
+#
+# {
+#   "userId": 5,
+#   "role": "MEMBER"
+# }

@@ -17,6 +17,10 @@ type ProjectNameConflictRow = {
   id: number;
 };
 
+type ProjectManagerCountRow = {
+  count: number;
+};
+
 function mapProjectRow(project: ProjectRow): Project {
   return {
     id: project.id,
@@ -85,6 +89,54 @@ async function getProjectMemberRole(projectId: number, userId: number) {
   );
 
   return membership?.role;
+}
+
+async function ensureProjectMemberExists(projectId: number, userId: number) {
+  const membership = await dbGet<EntityIdRow>(
+    "SELECT id FROM project_members WHERE project_id = ? AND user_id = ?",
+    [projectId, userId],
+  );
+
+  if (!membership) {
+    throw new AppError("Project member not found", 404);
+  }
+}
+
+async function getProjectManagerCount(projectId: number) {
+  const result = await dbGet<ProjectManagerCountRow>(
+    "SELECT COUNT(*) as count FROM project_members WHERE project_id = ? AND role = 'MANAGER'",
+    [projectId],
+  );
+
+  return result?.count ?? 0;
+}
+
+async function ensureManagerIntegrityOnRoleChange(
+  projectId: number,
+  userId: number,
+  nextRole?: ProjectMemberRole,
+) {
+  const currentRole = await getProjectMemberRole(projectId, userId);
+
+  if (!currentRole) {
+    throw new AppError("Project member not found", 404);
+  }
+
+  const isDemotingManager =
+    currentRole === "MANAGER" &&
+    nextRole !== undefined &&
+    nextRole !== "MANAGER";
+  const isRemovingManager = currentRole === "MANAGER" && nextRole === undefined;
+
+  if (!isDemotingManager && !isRemovingManager) {
+    return;
+  }
+
+  const managerCount = await getProjectManagerCount(projectId);
+
+  if (managerCount <= 1) {
+    throw new AppError("Project must have at least one manager", 409);
+  }
 }
 
 async function requireProjectAccess(
@@ -334,6 +386,34 @@ export async function addProjectMemberService(
   }
 }
 
+export async function updateProjectMemberService(
+  projectId: number,
+  userIdToUpdate: number,
+  nextRole: ProjectMemberRole,
+  userId: number,
+  role: Role,
+): Promise<void> {
+  try {
+    await requireProjectManager(projectId, userId, role);
+    await ensureProjectMemberExists(projectId, userIdToUpdate);
+    await ensureManagerIntegrityOnRoleChange(projectId, userIdToUpdate, nextRole);
+
+    const result = await dbRun(
+      "UPDATE project_members SET role = ? WHERE project_id = ? AND user_id = ?",
+      [nextRole, projectId, userIdToUpdate],
+    );
+
+    if (result.changes === 0) {
+      throw new AppError("Project member not found", 404);
+    }
+  } catch (err) {
+    if (err instanceof AppError) {
+      throw err;
+    }
+    throw new AppError("Failed to update project member", 500);
+  }
+}
+
 export async function removeProjectMemberService(
   projectId: number,
   userIdToRemove: number,
@@ -342,15 +422,8 @@ export async function removeProjectMemberService(
 ): Promise<void> {
   try {
     await requireProjectManager(projectId, userId, role);
-
-    const memberToRemove = await dbGet<EntityIdRow>(
-      "SELECT id FROM project_members WHERE project_id = ? AND user_id = ?",
-      [projectId, userIdToRemove],
-    );
-
-    if (!memberToRemove) {
-      throw new AppError("Project member not found", 404);
-    }
+    await ensureProjectMemberExists(projectId, userIdToRemove);
+    await ensureManagerIntegrityOnRoleChange(projectId, userIdToRemove);
 
     const result = await dbRun(
       "DELETE FROM project_members WHERE project_id = ? AND user_id = ?",
