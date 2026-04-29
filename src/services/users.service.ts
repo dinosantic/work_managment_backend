@@ -1,9 +1,14 @@
-import { dbGet, dbRun } from "../db/sqlite";
+import { dbAll, dbGet, dbRun } from "../db/sqlite";
 import { AppError } from "../errors/AppError";
-import { CurrentUser, CurrentUserRow } from "../types/users";
+import {
+  CurrentUser,
+  CurrentUserRow,
+  UserDirectoryItem,
+  UserDirectoryRow,
+} from "../types/users";
 import type { Role } from "../types/roles";
 
-function deriveDisplayName(email: string, displayName: string | null) {
+export function deriveDisplayName(email: string, displayName: string | null) {
   if (displayName?.trim()) {
     return displayName;
   }
@@ -37,6 +42,28 @@ export async function getCurrentUserService(userId: number): Promise<CurrentUser
     role: user.role,
     displayName: deriveDisplayName(user.email, user.display_name),
   };
+}
+
+export async function listUsersDirectoryService(): Promise<UserDirectoryItem[]> {
+  let users: UserDirectoryRow[];
+
+  try {
+    users = await dbAll<UserDirectoryRow>(
+      `
+        SELECT id, email, display_name
+        FROM users
+        ORDER BY COALESCE(NULLIF(TRIM(display_name), ''), email) ASC
+      `,
+    );
+  } catch {
+    throw new AppError("Failed to load users directory", 500);
+  }
+
+  return users.map((user) => ({
+    id: user.id,
+    email: user.email,
+    displayName: deriveDisplayName(user.email, user.display_name),
+  }));
 }
 
 export async function editCurrentUserService(

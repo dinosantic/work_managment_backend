@@ -8,6 +8,7 @@ import type {
   ProjectMemberRow,
   ProjectRow,
 } from "../types/projects";
+import { deriveDisplayName } from "./users.service";
 
 type EntityIdRow = {
   id: number;
@@ -38,6 +39,11 @@ function mapProjectMemberRow(member: ProjectMemberRow): ProjectMember {
     userId: member.user_id,
     role: member.role,
     createdAt: member.created_at,
+    user: {
+      id: member.user_id,
+      email: member.email,
+      displayName: deriveDisplayName(member.email, member.display_name),
+    },
   };
 }
 
@@ -300,7 +306,20 @@ export async function getProjectService(
     }
 
     const members = await dbAll<ProjectMemberRow>(
-      "SELECT id, project_id, user_id, role, created_at FROM project_members WHERE project_id = ? ORDER BY created_at ASC",
+      `
+        SELECT
+          pm.id,
+          pm.project_id,
+          pm.user_id,
+          pm.role,
+          pm.created_at,
+          u.email,
+          u.display_name
+        FROM project_members pm
+        JOIN users u ON u.id = pm.user_id
+        WHERE pm.project_id = ?
+        ORDER BY pm.created_at ASC
+      `,
       [projectId],
     );
 
@@ -342,7 +361,20 @@ export async function listProjectMembersService(
     await requireProjectAccess(projectId, userId, role);
 
     const members = await dbAll<ProjectMemberRow>(
-      "SELECT id, project_id, user_id, role, created_at FROM project_members WHERE project_id = ? ORDER BY created_at ASC",
+      `
+        SELECT
+          pm.id,
+          pm.project_id,
+          pm.user_id,
+          pm.role,
+          pm.created_at,
+          u.email,
+          u.display_name
+        FROM project_members pm
+        JOIN users u ON u.id = pm.user_id
+        WHERE pm.project_id = ?
+        ORDER BY pm.created_at ASC
+      `,
       [projectId],
     );
 

@@ -1,3 +1,5 @@
+import type { UserDirectoryItem } from "./users";
+
 export const PROJECT_MEMBER_ROLES = ["MANAGER", "MEMBER"] as const;
 
 export type ProjectMemberRole = (typeof PROJECT_MEMBER_ROLES)[number];
@@ -24,6 +26,8 @@ export type ProjectMemberRow = {
   user_id: number;
   role: ProjectMemberRole;
   created_at: string;
+  email: string;
+  display_name: string | null;
 };
 
 export type ProjectMember = {
@@ -32,4 +36,5 @@ export type ProjectMember = {
   userId: number;
   role: ProjectMemberRole;
   createdAt: string;
+  user: UserDirectoryItem;
 };

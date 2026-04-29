@@ -14,4 +14,16 @@ export type CurrentUser = {
   displayName: string;
 };
 
+export type UserDirectoryRow = {
+  id: number;
+  email: string;
+  display_name: string | null;
+};
+
+export type UserDirectoryItem = {
+  id: number;
+  email: string;
+  displayName: string;
+};
+
 export type EditCurrentUserBody = Pick<CurrentUser, "displayName">;
