@@ -50,7 +50,7 @@ export async function listUsersDirectoryService(): Promise<UserDirectoryItem[]> 
   try {
     users = await dbAll<UserDirectoryRow>(
       `
-        SELECT id, email, display_name
+        SELECT id, email, display_name, role
         FROM users
         ORDER BY COALESCE(NULLIF(TRIM(display_name), ''), email) ASC
       `,
@@ -63,6 +63,7 @@ export async function listUsersDirectoryService(): Promise<UserDirectoryItem[]> 
     id: user.id,
     email: user.email,
     displayName: deriveDisplayName(user.email, user.display_name),
+    role: user.role,
   }));
 }
 

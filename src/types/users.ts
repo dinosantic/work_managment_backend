@@ -18,12 +18,14 @@ export type UserDirectoryRow = {
   id: number;
   email: string;
   display_name: string | null;
+  role: Role;
 };
 
 export type UserDirectoryItem = {
   id: number;
   email: string;
   displayName: string;
+  role: Role;
 };
 
 export type EditCurrentUserBody = Pick<CurrentUser, "displayName">;

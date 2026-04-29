@@ -14,6 +14,11 @@ type EntityIdRow = {
   id: number;
 };
 
+type UserRoleLookupRow = {
+  id: number;
+  role: Role;
+};
+
 type ProjectNameConflictRow = {
   id: number;
 };
@@ -43,6 +48,7 @@ function mapProjectMemberRow(member: ProjectMemberRow): ProjectMember {
       id: member.user_id,
       email: member.email,
       displayName: deriveDisplayName(member.email, member.display_name),
+      role: member.user_role,
     },
   };
 }
@@ -59,13 +65,16 @@ async function ensureProjectExists(projectId: number) {
 }
 
 async function ensureUserExists(userId: number) {
-  const user = await dbGet<EntityIdRow>("SELECT id FROM users WHERE id = ?", [
-    userId,
-  ]);
+  const user = await dbGet<UserRoleLookupRow>(
+    "SELECT id, role FROM users WHERE id = ?",
+    [userId],
+  );
 
   if (!user) {
     throw new AppError("User not found", 404);
   }
+
+  return user;
 }
 
 async function ensureProjectNameIsAvailable(
@@ -314,7 +323,8 @@ export async function getProjectService(
           pm.role,
           pm.created_at,
           u.email,
-          u.display_name
+          u.display_name,
+          u.role as user_role
         FROM project_members pm
         JOIN users u ON u.id = pm.user_id
         WHERE pm.project_id = ?
@@ -369,7 +379,8 @@ export async function listProjectMembersService(
           pm.role,
           pm.created_at,
           u.email,
-          u.display_name
+          u.display_name,
+          u.role as user_role
         FROM project_members pm
         JOIN users u ON u.id = pm.user_id
         WHERE pm.project_id = ?
@@ -396,7 +407,11 @@ export async function addProjectMemberService(
 ): Promise<void> {
   try {
     await requireProjectManager(projectId, userId, role);
-    await ensureUserExists(userIdToAdd);
+    const userToAdd = await ensureUserExists(userIdToAdd);
+
+    if (userToAdd.role === "ADMIN") {
+      throw new AppError("Admins cannot be added to projects", 400);
+    }
 
     await dbRun(
       "INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, ?)",

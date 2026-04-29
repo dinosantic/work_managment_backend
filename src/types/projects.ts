@@ -28,6 +28,7 @@ export type ProjectMemberRow = {
   created_at: string;
   email: string;
   display_name: string | null;
+  user_role: UserDirectoryItem["role"];
 };
 
 export type ProjectMember = {
