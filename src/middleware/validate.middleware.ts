@@ -17,7 +17,11 @@ export function validate(schema: ZodType, target: RequestTarget = "body") {
       throw new AppError("Invalid request data", 400, details);
     }
 
-    req[target] = result.data;
+    if (target === "query") {
+      Object.assign(req.query, result.data);
+    } else {
+      req[target] = result.data;
+    }
     next();
   };
 }

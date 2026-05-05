@@ -26,8 +26,8 @@
 # Authorization: Bearer <manager-token>
 
 ### List project members
-GET http://localhost:3000/projects/1/members HTTP/1.1
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Miwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzc3MDM3Nzk1LCJleHAiOjE3NzcwNDEzOTV9.MwgDEefgghCS4EyXGpD4oRv9mSs1KZOdasIinm_g0kg
+# GET http://localhost:3000/projects/1/members HTTP/1.1
+# Authorization: Bearer <admin-token>
 
 ### Add project member as MEMBER
 # POST http://localhost:3000/projects/1/members HTTP/1.1
@@ -88,7 +88,16 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Miwicm9sZSI6I
 #   "role": "MANAGER"
 # }
 
-### Demote manager to member
+### Admin can demote manager to member
+# PATCH http://localhost:3000/projects/1/members/4 HTTP/1.1
+# Content-Type: application/json
+# Authorization: Bearer <admin-token>
+#
+# {
+#   "role": "MEMBER"
+# }
+
+### Manager cannot demote a manager
 # PATCH http://localhost:3000/projects/1/members/4 HTTP/1.1
 # Content-Type: application/json
 # Authorization: Bearer <manager-token>
@@ -100,7 +109,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Miwicm9sZSI6I
 ### Demoting the last manager should fail with 409
 # PATCH http://localhost:3000/projects/1/members/1 HTTP/1.1
 # Content-Type: application/json
-# Authorization: Bearer <manager-token>
+# Authorization: Bearer <admin-token>
 #
 # {
 #   "role": "MEMBER"
@@ -135,3 +144,149 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Miwicm9sZSI6I
 #   "userId": 5,
 #   "role": "MEMBER"
 # }
+
+### ------------------------------
+### Project-scoped task visibility
+### ------------------------------
+
+### Create task in project as manager and assign to project member
+# POST http://localhost:3000/tasks HTTP/1.1
+# Content-Type: application/json
+# Authorization: Bearer <manager-token>
+#
+# {
+#   "projectId": 1,
+#   "title": "Prepare launch checklist",
+#   "description": "Collect all release steps",
+#   "priority": "HIGH",
+#   "dueDate": "2026-05-15",
+#   "assigneeUserId": 3
+# }
+
+### Create task should fail when creator is not project member
+# POST http://localhost:3000/tasks HTTP/1.1
+# Content-Type: application/json
+# Authorization: Bearer <outsider-token>
+#
+# {
+#   "projectId": 1,
+#   "title": "Outsider task",
+#   "description": "Should be rejected",
+#   "priority": "LOW",
+#   "dueDate": "2026-05-20",
+#   "assigneeUserId": null
+# }
+
+### Create task should fail when assignee is outside project
+# POST http://localhost:3000/tasks HTTP/1.1
+# Content-Type: application/json
+# Authorization: Bearer <manager-token>
+#
+# {
+#   "projectId": 1,
+#   "title": "Invalid assignment",
+#   "description": "Assignee is not in project",
+#   "priority": "MEDIUM",
+#   "dueDate": "2026-05-20",
+#   "assigneeUserId": 4
+# }
+
+### Member can view all tasks in their visible projects
+# GET http://localhost:3000/tasks HTTP/1.1
+# Authorization: Bearer <member-token>
+
+### Member can view tasks in a specific project
+# GET http://localhost:3000/tasks?projectId=1&scope=project HTTP/1.1
+# Authorization: Bearer <member-token>
+
+### Outsider should fail to list tasks for a project they do not belong to
+# GET http://localhost:3000/tasks?projectId=1&scope=project HTTP/1.1
+# Authorization: Bearer <outsider-token>
+
+### Member can list only tasks assigned to them
+# GET http://localhost:3000/tasks?scope=assigned HTTP/1.1
+# Authorization: Bearer <member-token>
+
+### Member can list only tasks they created
+# GET http://localhost:3000/tasks?scope=created HTTP/1.1
+# Authorization: Bearer <member-token>
+
+### Admin can list all tasks in a project
+# GET http://localhost:3000/tasks?projectId=1 HTTP/1.1
+# Authorization: Bearer <admin-token>
+
+### Member can open teammate task in same project
+# GET http://localhost:3000/tasks/1 HTTP/1.1
+# Authorization: Bearer <member-token>
+
+### Outsider should fail to open task from project they do not belong to
+# GET http://localhost:3000/tasks/1 HTTP/1.1
+# Authorization: Bearer <outsider-token>
+
+### Member can update own created task
+# PATCH http://localhost:3000/tasks/1 HTTP/1.1
+# Content-Type: application/json
+# Authorization: Bearer <member-token>
+#
+# {
+#   "title": "Prepare launch checklist",
+#   "description": "Updated by creator",
+#   "status": "IN_PROGRESS",
+#   "priority": "HIGH",
+#   "dueDate": "2026-05-15",
+#   "assigneeUserId": 3
+# }
+
+### Member can update task assigned to them
+# PATCH http://localhost:3000/tasks/2 HTTP/1.1
+# Content-Type: application/json
+# Authorization: Bearer <member-token>
+#
+# {
+#   "title": "Assigned task",
+#   "description": "Updated by assignee",
+#   "status": "DONE",
+#   "priority": "MEDIUM",
+#   "dueDate": "2026-05-21",
+#   "assigneeUserId": 3
+# }
+
+### Member cannot update random teammate task
+# PATCH http://localhost:3000/tasks/3 HTTP/1.1
+# Content-Type: application/json
+# Authorization: Bearer <member-token>
+#
+# {
+#   "title": "Teammate task",
+#   "description": "Should be rejected",
+#   "status": "OPEN",
+#   "priority": "LOW",
+#   "dueDate": "2026-05-18",
+#   "assigneeUserId": 2
+# }
+
+### Manager can update any task in project, including reassignment
+# PATCH http://localhost:3000/tasks/3 HTTP/1.1
+# Content-Type: application/json
+# Authorization: Bearer <manager-token>
+#
+# {
+#   "title": "Teammate task",
+#   "description": "Updated by manager",
+#   "status": "IN_PROGRESS",
+#   "priority": "HIGH",
+#   "dueDate": "2026-05-18",
+#   "assigneeUserId": 3
+# }
+
+### Member can delete only tasks they created
+# DELETE http://localhost:3000/tasks/1 HTTP/1.1
+# Authorization: Bearer <member-token>
+
+### Member cannot delete teammate task
+# DELETE http://localhost:3000/tasks/3 HTTP/1.1
+# Authorization: Bearer <member-token>
+
+### Manager can delete any task in project
+# DELETE http://localhost:3000/tasks/3 HTTP/1.1
+# Authorization: Bearer <manager-token>

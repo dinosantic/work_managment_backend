@@ -9,6 +9,7 @@ import {
 } from "../services/tasks.service";
 import {
   CreateTaskBody,
+  ListTasksQuery,
   TaskIdParams,
   UpdateTaskBody,
 } from "../schemas/task.schema";
@@ -36,10 +37,14 @@ export async function createTask(
 }
 
 //get list of tasks
-export async function listTasks(req: AuthRequest, res: Response) {
+export async function listTasks(
+  req: AuthRequest<Record<string, string>, unknown, ListTasksQuery>,
+  res: Response,
+) {
   const { id, role } = req.user!;
+  const { projectId, scope } = req.query;
 
-  const tasks = await listTasksService(id, role);
+  const tasks = await listTasksService(id, role, { projectId, scope });
   res.status(200).json(tasks);
 }
 

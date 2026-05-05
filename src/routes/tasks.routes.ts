@@ -10,6 +10,7 @@ import {
 import { validate } from "../middleware/validate.middleware";
 import {
   createTaskSchema,
+  listTasksQuerySchema,
   taskIdParamSchema,
   updateTaskSchema,
 } from "../schemas/task.schema";
@@ -17,7 +18,7 @@ import {
 const router = Router();
 
 router.post("/", authMiddleware, validate(createTaskSchema), createTask);
-router.get("/", authMiddleware, listTasks);
+router.get("/", authMiddleware, validate(listTasksQuerySchema, "query"), listTasks);
 router.get("/:id", authMiddleware, validate(taskIdParamSchema, "params"), getTask);
 router.patch(
   "/:id",

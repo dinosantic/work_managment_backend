@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { TASK_PRIORITIES, TASK_STATUSES } from "../types/tasks";
+import {
+  TASK_LIST_SCOPES,
+  TASK_PRIORITIES,
+  TASK_STATUSES,
+} from "../types/tasks";
 
 export const createTaskSchema = z.object({
   projectId: z.number().int().positive("Project id must be a positive integer"),
@@ -30,6 +34,12 @@ export const taskIdParamSchema = z.object({
   id: z.string().regex(/^\d+$/, "Task id must be a positive integer"),
 });
 
+export const listTasksQuerySchema = z.object({
+  projectId: z.coerce.number().int().positive().optional(),
+  scope: z.enum(TASK_LIST_SCOPES).optional(),
+});
+
 export type CreateTaskBody = z.infer<typeof createTaskSchema>;
 export type UpdateTaskBody = z.infer<typeof updateTaskSchema>;
 export type TaskIdParams = z.infer<typeof taskIdParamSchema>;
+export type ListTasksQuery = z.infer<typeof listTasksQuerySchema>;

@@ -117,6 +117,16 @@ async function ensureProjectMemberExists(projectId: number, userId: number) {
   }
 }
 
+async function getRequiredProjectMemberRole(projectId: number, userId: number) {
+  const membershipRole = await getProjectMemberRole(projectId, userId);
+
+  if (!membershipRole) {
+    throw new AppError("Project member not found", 404);
+  }
+
+  return membershipRole;
+}
+
 async function getProjectManagerCount(projectId: number) {
   const result = await dbGet<ProjectManagerCountRow>(
     "SELECT COUNT(*) as count FROM project_members WHERE project_id = ? AND role = 'MANAGER'",
@@ -442,7 +452,23 @@ export async function updateProjectMemberService(
 ): Promise<void> {
   try {
     await requireProjectManager(projectId, userId, role);
-    await ensureProjectMemberExists(projectId, userIdToUpdate);
+    const currentRole = await getRequiredProjectMemberRole(projectId, userIdToUpdate);
+
+    if (role !== "ADMIN") {
+      const requesterMembershipRole = await getRequiredProjectMemberRole(
+        projectId,
+        userId,
+      );
+
+      if (
+        requesterMembershipRole !== "MANAGER" ||
+        currentRole !== "MEMBER" ||
+        nextRole !== "MANAGER"
+      ) {
+        throw new AppError("Managers can only promote members to managers", 403);
+      }
+    }
+
     await ensureManagerIntegrityOnRoleChange(projectId, userIdToUpdate, nextRole);
 
     const result = await dbRun(

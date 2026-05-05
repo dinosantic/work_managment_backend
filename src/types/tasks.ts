@@ -1,8 +1,10 @@
 export const TASK_STATUSES = ["OPEN", "IN_PROGRESS", "DONE"] as const;
 export const TASK_PRIORITIES = ["LOW", "MEDIUM", "HIGH"] as const;
+export const TASK_LIST_SCOPES = ["assigned", "created", "project"] as const;
 
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 export type TaskPriority = (typeof TASK_PRIORITIES)[number];
+export type TaskListScope = (typeof TASK_LIST_SCOPES)[number];
 
 export type TaskRow = {
   id: number;

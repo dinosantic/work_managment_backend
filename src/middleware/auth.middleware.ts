@@ -5,7 +5,8 @@ import { AuthTokenPayload } from "../types/auth";
 export interface AuthRequest<
   TParams = Record<string, string>,
   TBody = unknown,
-> extends Request<TParams, unknown, TBody> {
+  TQuery = Record<string, string>,
+> extends Request<TParams, unknown, TBody, TQuery> {
   user?: AuthTokenPayload;
 }
 

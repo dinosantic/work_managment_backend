@@ -3,6 +3,7 @@ import path from "node:path";
 
 type TableColumn = {
   name: string;
+  notnull?: number;
 };
 
 const dbPath = path.join(__dirname, "../../database.sqlite");
@@ -17,6 +18,127 @@ export const db = new sqlite3.Database(dbPath, (err) => {
 
 function getColumnNames(columns: TableColumn[]) {
   return new Set(columns.map((column) => column.name));
+}
+
+function rebuildTasksTableWithRequiredProjectId() {
+  db.run("ALTER TABLE tasks RENAME TO tasks_pre_project_required", (renameErr) => {
+    if (renameErr) {
+      console.error(
+        "Failed to rename tasks table before enforcing required project_id",
+        renameErr,
+      );
+      return;
+    }
+
+    db.run(
+      `
+        CREATE TABLE tasks (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          status TEXT NOT NULL DEFAULT 'OPEN',
+          priority TEXT NOT NULL DEFAULT 'MEDIUM',
+          due_date TEXT,
+          created_by INTEGER NOT NULL,
+          assignee_user_id INTEGER,
+          project_id INTEGER,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (created_by) REFERENCES users(id),
+          FOREIGN KEY (assignee_user_id) REFERENCES users(id),
+          FOREIGN KEY (project_id) REFERENCES projects(id)
+        )
+      `,
+      (createErr) => {
+        if (createErr) {
+          console.error(
+            "Failed to recreate tasks table with required project_id",
+            createErr,
+          );
+          return;
+        }
+
+        db.run(
+          `
+            INSERT INTO tasks (
+              id,
+              title,
+              description,
+              status,
+              priority,
+              due_date,
+              created_by,
+              assignee_user_id,
+              project_id,
+              created_at
+            )
+            SELECT
+              id,
+              title,
+              description,
+              status,
+              priority,
+              due_date,
+              created_by,
+              assignee_user_id,
+              project_id,
+              created_at
+            FROM tasks_pre_project_required
+          `,
+          (copyErr) => {
+            if (copyErr) {
+              console.error(
+                "Failed to copy tasks into required-project schema",
+                copyErr,
+              );
+              return;
+            }
+
+            db.run("DROP TABLE tasks_pre_project_required", (dropErr) => {
+              if (dropErr) {
+                console.error(
+                  "Failed to drop temporary tasks table after enforcing project_id",
+                  dropErr,
+                );
+                return;
+              }
+
+              console.log("Enforced required project_id on tasks table");
+            });
+          },
+        );
+      },
+    );
+  });
+}
+
+function ensureTasksProjectIdIsRequired(columns: TableColumn[]) {
+  const projectIdColumn = columns.find((column) => column.name === "project_id");
+
+  if (!projectIdColumn || projectIdColumn.notnull === 1) {
+    return;
+  }
+
+  db.get<{ count: number }>(
+    "SELECT COUNT(*) as count FROM tasks WHERE project_id IS NULL",
+    (countErr, result) => {
+      if (countErr) {
+        console.error(
+          "Failed to verify task project assignments before enforcing schema",
+          countErr,
+        );
+        return;
+      }
+
+      if ((result?.count ?? 0) > 0) {
+        console.error(
+          "Cannot enforce required project_id because some tasks are still missing a project",
+        );
+        return;
+      }
+
+      rebuildTasksTableWithRequiredProjectId();
+    },
+  );
 }
 
 function migrateLegacyTasksTable(columns: TableColumn[]) {
@@ -58,7 +180,7 @@ function migrateLegacyTasksTable(columns: TableColumn[]) {
           due_date TEXT,
           created_by INTEGER NOT NULL,
           assignee_user_id INTEGER,
-          project_id INTEGER,
+          project_id INTEGER NOT NULL,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (created_by) REFERENCES users(id),
           FOREIGN KEY (assignee_user_id) REFERENCES users(id),
@@ -113,11 +235,13 @@ function migrateLegacyTasksTable(columns: TableColumn[]) {
                 return;
               }
 
-              console.log(
-                "Migrated legacy tasks table to creator/assignee schema",
-              );
+              console.log("Migrated legacy tasks table to creator/assignee schema");
 
-              backfillTaskProjects();
+              backfillTaskProjects(() =>
+                ensureTasksProjectIdIsRequired([
+                  { name: "project_id", notnull: 0 },
+                ]),
+              );
             });
           },
         );
@@ -126,7 +250,7 @@ function migrateLegacyTasksTable(columns: TableColumn[]) {
   });
 }
 
-function backfillTaskProjects() {
+function backfillTaskProjects(onComplete?: () => void) {
   db.all(
     `
       SELECT id, created_by, assignee_user_id
@@ -144,10 +268,12 @@ function backfillTaskProjects() {
     ) => {
       if (err) {
         console.error("Failed to load tasks for project backfill", err);
+        onComplete?.();
         return;
       }
 
       if (rows.length === 0) {
+        onComplete?.();
         return;
       }
 
@@ -170,6 +296,7 @@ function backfillTaskProjects() {
       const processCreator = (index: number) => {
         if (index >= creators.length) {
           console.log("Backfilled task project assignments");
+          onComplete?.();
           return;
         }
 
@@ -367,7 +494,7 @@ db.serialize(() => {
     due_date TEXT,
     created_by INTEGER NOT NULL,
     assignee_user_id INTEGER,
-    project_id INTEGER,
+    project_id INTEGER NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (created_by) REFERENCES users(id),
     FOREIGN KEY (assignee_user_id) REFERENCES users(id),
@@ -478,12 +605,17 @@ db.serialize(() => {
           return;
         }
 
-        backfillTaskProjects();
+        backfillTaskProjects(() =>
+          ensureTasksProjectIdIsRequired([
+            ...columns,
+            { name: "project_id", notnull: 0 },
+          ]),
+        );
       });
 
       return;
     }
 
-    backfillTaskProjects();
+    backfillTaskProjects(() => ensureTasksProjectIdIsRequired(columns));
   });
 });
